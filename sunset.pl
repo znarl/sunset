@@ -4,7 +4,6 @@ use DateTime;
 use DateTime::Event::Sunrise;
 use Math::Round;
 use Net::Ping;
-use IO::Handle;
 use Env qw($TAPO_USERNAME $TAPO_PASSWORD);
 use strict;
 
@@ -35,10 +34,7 @@ my $set_lamp_livingroom = "";
 
 
 my $tty;
-sub isatty() { 
-  no autodie; 
-  return open($tty, '+<', '/dev/tty'); 
-}
+
 
 isatty();
 print "Found a TTY, printing debug.\n" if ( $tty );
@@ -71,15 +67,14 @@ if (( $hour >= 0 ) and( $hour < 6 )) {
 }
 
 $brightness = 50;
+$is_it_day = 0;
 print "Make the light a bit brighter it is nighttime.\n" if ( $tty );
 if ( $is_it_day ) { $brightness = $brightness - $daytime_brightness_mod; }
 
 $wimpy_power = get_power_usage ($wimpy_power_ip, $TAPO_USERNAME, $TAPO_PASSWORD);
 $ps5_power = get_power_usage ($ps5_power_ip, $TAPO_USERNAME, $TAPO_PASSWORD);
 
-
 print "Wimpy current power usage is $wimpy_power W > $wimpy_power_inroom_trigger W threshold for in use and brightness is $brightness\n" if ( $tty );
-
 
 if ( $wimpy_power > $wimpy_power_inroom_trigger )  { 
   $brightness = $brightness + $in_room_mod; 
@@ -145,4 +140,8 @@ sub set_lamp_colour {
         return undef; # Return undefined on failure
     }
     return 1; # Return success
+}
+
+sub isatty {
+  return -t STDIN || -t STDOUT || -t STDERR;
 }
