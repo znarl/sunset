@@ -4,65 +4,66 @@ use DateTime;
 use DateTime::Event::Sunrise;
 use Math::Round;
 use Net::Ping;
+use IO::Handle;
 use strict;
 
 
 my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime();
 
-my $phone_address = "48:2C:A0:29:C8:71";
-my $phone_ip = "192.168.100.9";
-my $bulb_ip = "192.168.100.14";
-my $wimpy_power_ip = "192.168.100.13";
-my $ps5_power_ip = "192.168.100.20";
+my $bulb_ip_office = "192.168.100.39";
+my $bulb_ip_livingroom = "192.168.100.16";
+my $wimpy_power_ip = "192.168.100.5";
+my $ps5_power_ip = "192.168.100.6";
 
 my $longitude = 101;
 my $latitude = 3;
 
 my $brightness = 100;
-my $daytime_brightness_mod = 90;
-my $in_room_mod = 40;
-my $in_room_mod_wimpy = 10;
+my $daytime_brightness_mod = 99;
+my $in_room_mod = 50;
 my $hue = 0;
 my $saturation = 100;
 my $minute_of_day = (( $hour * 60 ) + $min ); # 0 - 1440
 
-my $ps5_power = 0;
 my $wimpy_power = 0;
-my $is_home = 0; # assume nope
-my $is_home_human = "No";
+my $ps5_power = 0;
+my $wimpy_power_inroom_trigger = 160;
+my $ps5_power_inroom_trigger = 50;
+my $set_lamp_office = "";
+my $set_lamp_livingroom = "";
+
+
+my ($tapo_username, $tapo_password) = @ARGV;
+
+# Check if username and password are provided
+if (!defined $tapo_username || !defined $tapo_password) {
+    die "Usage: $0 <username> <password>\n";
+}
+
+# Sanitize username and password
+$tapo_username =~ s/^\s+|\s+$//g;  # Trim leading and trailing whitespace
+$tapo_password =~ s/^\s+|\s+$//g;  # Trim leading and trailing whitespace
 
 my $tty;
+sub isatty() { 
+  no autodie; 
+  return open($tty, '+<', '/dev/tty'); 
+}
+
 isatty();
 print "Is someone watching?  There is someone! Gotta explain what we are doing as we do it for the humans.\n" if ( $tty );
 
-if ( $tty ) {
-  print "I think Karl has been drinking too much and turned off the lamp again.\n" unless pingecho($bulb_ip);
-  print "Wimpy Power is cut?  And I am running?  How is this possible?  Call Xfiles team!\n" unless pingecho($wimpy_power_ip);
-  print "Playstation power is cut?  Someone playing too long?\n" unless pingecho($ps5_power_ip);
-};
-
-print "So when is sunrise and sunset today anyway?. Checking the library...\n" if ( $tty );
 my $dt = DateTime->now;             
 my $sunrise = DateTime::Event::Sunrise ->sunrise ( longitude =>$longitude, latitude  =>$latitude, );
 my $sunset = DateTime::Event::Sunrise ->sunset ( longitude =>$longitude, latitude  =>$latitude, ); 
-print "Great, got that figured out now. Just not saying when yet. Yeah, I am sometimes secretive.\n" if ( $tty );
 
-print "So next we gotta figure out if it is day or night knowing the current time and sunset and sunrise times...\n" if ( $tty );
 $hour = int ($hour);
 # is it day or night?
 my $day_set = DateTime::SpanSet->from_sets(
   start_set => $sunrise, end_set => $sunset );
 my $is_it_day = $day_set->contains( $dt ) ? '1' : '0';
-print "So 1 means day and 0 means night.  That makes it now a $is_it_day.\n" if ( $tty );
 
-print "Is anyone home anyway?  Looking for Karls phone...\n" if ( $tty );
-if ( pingecho($phone_ip) ) {
-  $is_home = 1;
-  $is_home_human = "Yes";
-}
-print "The answer to the question of is Karl is at home is $is_home_human, or $is_home in binary computer speak.\n" if ( $tty );
-
-print "Next the complex bit, gotta work out what time of day it is and what colour we need to set.\n" if ( $tty );
+print "Work out what time of day it is and what colour we need to set.\n" if ( $tty );
 # 0 - 6
 if (( $hour >= 0 ) and( $hour < 6 )) {
   $hue = round (( $minute_of_day / 360 ) * 260 );  # between 0 and 260 
@@ -80,44 +81,76 @@ if (( $hour >= 0 ) and( $hour < 6 )) {
   $saturation = 100;
 }
 
-print "Now to make the light a bit brighter if it is day time or not.\n" if ( $tty );
+$brightness = 100;
+print "Make the light a bit brighter it is nighttime.\n" if ( $tty );
 if ( $is_it_day ) { $brightness = $brightness - $daytime_brightness_mod; }
 
-print "Checking the power usage of Wimpy by asking the power supply monitor...\n" if ( $tty );
-my $kasa_wimpypower = `/usr/local/bin/kasa --type plug --host  $wimpy_power_ip`;
-#if ( $kasa_wimpypower =~ m/'power': (\d*\.?\d*)/ ) { $wimpy_power = $1; }
-if ( $kasa_wimpypower =~ m/power=(\d*\.?\d*) voltage=(\d*\.?\d*)/ ) { $wimpy_power = round ( $1 ); }
+$wimpy_power = get_power_usage ($wimpy_power_ip, $tapo_username, $tapo_password);
+$ps5_power = get_power_usage ($ps5_power_ip, $tapo_username, $tapo_password);
 
 
-print "Now I need to ask the power usage monitor on the PS5 power supply how much power it is using...\n" if ( $tty );
-my $kasa_ps5power = `/usr/local/bin/kasa --type plug --host  $ps5_power_ip`;
-if ( $kasa_ps5power =~ m/power=(\d*\.?\d*) voltage=(\d*\.?\d*)/ ) { $ps5_power = round ( $1 ); }
-
-print "Figuring out, going by the powerusage of the Wimpy at $wimpy_power and PS5 at $ps5_power, if we think someone is in the room...\n" if ( $tty );
-if (( $wimpy_power > 160 ) || ( $ps5_power > 5000 ) ) { 
-  $brightness = $brightness + $in_room_mod_wimpy; 
-  $is_home = 1;
+if ( $wimpy_power > $wimpy_power_inroom_trigger )  { 
+  $brightness = $brightness + $in_room_mod; 
 }
+
+if ( $brightness > 100 ) { $brightness = 100; }
+if ( $brightness < 1 ) { $brightness = 1; }
 
 if ( $tty ) { 
-	print "So, in summary, here is what we know:\n";
-	print "* PS5 Power in milliwatts is $ps5_power\n";
-	print "* Wimpy Power in watts is $wimpy_power\n";
-	print "* That is it daytime in computer speak is $is_it_day\n";
-	print "* That $is_home_human is the answer to if Karl is at home\n";
-	print "In conclusion I think the Hue, Saturation and Brightness values for lamp need to be set to $hue $saturation $brightness\n";
-	print "Is someone home? $is_home_human! So turning lamp off if no one is home or setting the lamp colours and brightness if someone is home.\n";
+	print "Wimpy Power is $wimpy_power W and daytime is $is_it_day, PS5 Power is $ps5_power W. Is it day? $is_it_day \n";
 };
 
-print "Finally, time to talk with the lamp and tell it what to do based on above...\n" if ( $tty );
-if ( $brightness > 100 ) { $brightness = 100; }
-if ( $is_home > 0 ) {
-  `/usr/local/bin/kasa --type bulb --host $bulb_ip hsv $hue $saturation $brightness`;
-} else {
-  `/usr/local/bin/kasa --type bulb --host $bulb_ip off`;
+set_lamp_colour ($bulb_ip_office, $tapo_username, $tapo_password, $hue, $saturation, $brightness);
+
+$brightness = 100;
+print "Make the light a bit brighter it is nighttime.\n" if ( $tty );
+if ( $is_it_day ) { $brightness = $brightness - $daytime_brightness_mod; }
+
+print "$ps5_power > $ps5_power_inroom_trigger $brightness\n" if ( $tty );
+
+if ( $ps5_power > $ps5_power_inroom_trigger )  { 
+  $brightness = $brightness + $in_room_mod; 
 }
 
-sub isatty() { 
-  no autodie; 
-  return open($tty, '+<', '/dev/tty'); 
+if ( $brightness > 100 ) { $brightness = 100; }
+if ( $brightness < 1 ) { $brightness = 1; }
+
+set_lamp_colour ($bulb_ip_livingroom, $tapo_username, $tapo_password, $hue, $saturation, $brightness);
+
+sub get_power_usage {
+    my ($device_ip, $username, $password) = @_;
+
+    # Run the kasa command to get power usage
+    my $command_output = `/usr/local/bin/kasa --host $device_ip --username $username --password $password`;
+
+    # Check if the command was successful
+    if ($? != 0) {
+        my $exit_code = $? >> 8;
+        print "Error: Unable to get power usage from device at $device_ip (Exit code: $exit_code).\n";
+        return undef; # Return undefined on failure
+    }
+
+    # Extract power usage from the command output
+    if ($command_output =~ /(\d+\.?\d*)\s*W/) {
+        return $1; # Return the power usage in watts
+    } else {
+        print "Error: Unable to parse power usage from device at $device_ip.\n";
+        return undef; # Return undefined if parsing fails
+    }
+}
+
+sub set_lamp_colour {
+    my ($device_ip, $username, $password, $hue, $saturation, $brightness) = @_;
+
+    # Run the kasa command to set the lamp color
+    print "Hue, Saturation and Brightness values for lamp set to $hue $saturation $brightness\n";
+    my $command_output = `/usr/local/bin/kasa --host $device_ip --username $username --password $password hsv $hue $saturation $brightness`;
+
+    # Check if the command was successful
+    if ($? != 0) {
+        my $exit_code = $? >> 8;
+        print "Error: Unable to set the lamp color (Exit code: $exit_code).\n";
+        return undef; # Return undefined on failure
+    }
+    return 1; # Return success
 }
