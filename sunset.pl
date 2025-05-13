@@ -1,12 +1,10 @@
 #!/usr/bin/perl
 
-use DateTime;
 use DateTime::Event::Sunrise;
 use Math::Round;
 use Net::Ping;
 use Env qw($TAPO_USERNAME $TAPO_PASSWORD);
 use strict;
-
 
 my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime();
 
