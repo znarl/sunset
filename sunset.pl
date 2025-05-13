@@ -18,7 +18,7 @@ my $ps5_power_ip = "192.168.100.6";
 my $longitude = 101;
 my $latitude = 3;
 
-my $brightness = "";
+my $brightness = "50";
 my $daytime_brightness_mod = 49;
 my $in_room_mod = 50;
 my $hue = 0;
@@ -32,12 +32,8 @@ my $ps5_power_inroom_trigger = 50;
 my $set_lamp_office = "";
 my $set_lamp_livingroom = "";
 
-
-my $tty;
-
-
-isatty();
-print "Found a TTY, printing debug.\n" if ( $tty );
+my $tty=istty();
+print "Found a TTY, printing debug.\n" if $tty;
 
 my $dt = DateTime->now;             
 my $sunrise = DateTime::Event::Sunrise ->sunrise ( longitude =>$longitude, latitude  =>$latitude, );
@@ -66,8 +62,6 @@ if (( $hour >= 0 ) and( $hour < 6 )) {
   $saturation = 100;
 }
 
-$brightness = 50;
-$is_it_day = 0;
 print "Make the light a bit brighter it is nighttime.\n" if ( $tty );
 if ( $is_it_day ) { $brightness = $brightness - $daytime_brightness_mod; }
 
@@ -136,12 +130,12 @@ sub set_lamp_colour {
     # Check if the command was successful
     if ($? != 0) {
         my $exit_code = $? >> 8;
-        print "Error: Unable to set the lamp color (Exit code: $exit_code).\n";
+        print "Error: Unable to set the lamp color (Exit code: $exit_code).\n" if ( $tty );
         return undef; # Return undefined on failure
     }
     return 1; # Return success
 }
 
-sub isatty {
-  return -t STDIN || -t STDOUT || -t STDERR;
+sub istty {
+  if ( -t STDIN ) { return 1 } else { return 0 };
 }
