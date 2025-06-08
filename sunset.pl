@@ -13,12 +13,22 @@ my $bulb_ip_livingroom = "192.168.100.16";
 my $wimpy_power_ip = "192.168.100.5";
 my $ps5_power_ip = "192.168.100.6";
 
+my $kitchen_ip = "192.168.100.44";
+
+my $phone_address = "48:2C:A0:29:C8:71";
+my $phone_ip = "192.168.100.56";
+my $ping_retries = 3;
+my $ping_timeout = 2;
+my $is_home = 0;
+my $ping = Net::Ping->new();
+
 my $longitude = 101;
 my $latitude = 3;
 
 my $brightness = "50";
 my $daytime_brightness_mod = 49;
 my $in_room_mod = 50;
+my $is_home_brightness_mod = 49;
 my $hue = 0;
 my $saturation = 100;
 my $minute_of_day = (( $hour * 60 ) + $min ); # 0 - 1440
@@ -32,6 +42,13 @@ my $set_lamp_livingroom = "";
 
 my $tty=istty();
 print "Found a TTY, printing debug.\n" if $tty;
+
+for my $i (1 .. $ping_retries) {
+  if ( $ping->ping($phone_ip, $ping_timeout) ) {
+    $is_home = 1;
+  }
+}
+print "Is Karl Home? $is_home\n" if ( $tty );
 
 my $dt = DateTime->now;             
 my $sunrise = DateTime::Event::Sunrise ->sunrise ( longitude =>$longitude, latitude  =>$latitude, );
@@ -60,7 +77,7 @@ if (( $hour >= 0 ) and( $hour < 6 )) {
   $saturation = 100;
 }
 
-print "Make the light a bit brighter it is nighttime.\n" if ( $tty );
+print "Make the light a bit brighter if it is nighttime.\n" if ( $tty );
 if ( $is_it_day ) { $brightness = $brightness - $daytime_brightness_mod; }
 
 $wimpy_power = get_power_usage ($wimpy_power_ip, $TAPO_USERNAME, $TAPO_PASSWORD);
@@ -72,11 +89,15 @@ if ( $wimpy_power > $wimpy_power_inroom_trigger )  {
   $brightness = $brightness + $in_room_mod; 
 }
 
+if ( $is_home == 0 ) {
+  $brightness = $brightness - $is_home_brightness_mod;
+}
+
 if ( $brightness > 100 ) { $brightness = 100; }
 if ( $brightness < 1 ) { $brightness = 1; }
 
 if ( $tty ) { 
-	print "Wimpy Power is $wimpy_power W and daytime is $is_it_day, PS5 Power is $ps5_power W. Is it day? $is_it_day \n";
+	print "Wimpy Power is $wimpy_power W and daytime is $is_it_day, PS5 Power is $ps5_power W. Is it day? $is_it_day\n";
 };
 
 set_lamp_colour ($bulb_ip_office, $TAPO_USERNAME, $TAPO_PASSWORD, $hue, $saturation, $brightness);
@@ -84,6 +105,10 @@ set_lamp_colour ($bulb_ip_office, $TAPO_USERNAME, $TAPO_PASSWORD, $hue, $saturat
 $brightness = 50;
 print "Make the light a bit brighter it is nighttime.\n" if ( $tty );
 if ( $is_it_day ) { $brightness = $brightness - $daytime_brightness_mod; }
+
+if ( $is_home == 0 ) {
+  $brightness = $brightness - $is_home_brightness_mod;
+}
 
 print "PS5 $ps5_power W >  $ps5_power_inroom_trigger threshold and brightness is $brightness\n" if ( $tty );
 
@@ -96,6 +121,18 @@ if ( $brightness < 1 ) { $brightness = 1; }
 
 set_lamp_colour ($bulb_ip_livingroom, $TAPO_USERNAME, $TAPO_PASSWORD, $hue, $saturation, $brightness);
 
+
+if ( $is_home && $is_it_day == 0 && $hour > 18 ) {
+  print "Karl is home and it is night, turning on the kitchen light.\n" if ( $tty );
+my $command_output = `/usr/local/bin/kasa --host $kitchen_ip --username $TAPO_USERNAME --password $TAPO_PASSWORD on`;
+} else {
+    if ( $ps5_power > $ps5_power_inroom_trigger && $is_it_day == 0 ) {
+      my $command_output = `/usr/local/bin/kasa --host $kitchen_ip --username $TAPO_USERNAME --password $TAPO_PASSWORD on`;
+    } else {
+      my $command_output = `/usr/local/bin/kasa --host $kitchen_ip --username $TAPO_USERNAME --password $TAPO_PASSWORD off`;
+  }
+}
+
 sub get_power_usage {
     my ($device_ip, $username, $password) = @_;
 
@@ -104,7 +141,7 @@ sub get_power_usage {
 
     # Check if the command was successful
     if ($? != 0) {
-        my $exit_code = $? >> 8;
+        my $exit_code = $? >> 0;
         print "Error: Unable to get power usage from device at $device_ip (Exit code: $exit_code).\n";
         return undef; # Return undefined on failure
     }
@@ -127,7 +164,7 @@ sub set_lamp_colour {
 
     # Check if the command was successful
     if ($? != 0) {
-        my $exit_code = $? >> 8;
+        my $exit_code = $? >> 0;
         print "Error: Unable to set the lamp color (Exit code: $exit_code).\n" if ( $tty );
         return undef; # Return undefined on failure
     }
