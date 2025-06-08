@@ -87,6 +87,7 @@ print "Wimpy current power usage is $wimpy_power W > $wimpy_power_inroom_trigger
 
 if ( $wimpy_power > $wimpy_power_inroom_trigger )  { 
   $brightness = $brightness + $in_room_mod; 
+  $is_home = 1;
 }
 
 if ( $is_home == 0 ) {
@@ -114,6 +115,7 @@ print "PS5 $ps5_power W >  $ps5_power_inroom_trigger threshold and brightness is
 
 if ( $ps5_power > $ps5_power_inroom_trigger )  { 
   $brightness = $brightness + $in_room_mod; 
+  $is_home = 1;
 }
 
 if ( $brightness > 100 ) { $brightness = 100; }
