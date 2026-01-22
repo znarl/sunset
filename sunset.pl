@@ -104,7 +104,7 @@ if ( $tty ) {
 set_lamp_colour ($bulb_ip_office, $TAPO_USERNAME, $TAPO_PASSWORD, $hue, $saturation, $brightness);
 
 $brightness = 50;
-print "Make the light a bit brighter it is nighttime.\n" if ( $tty );
+print "Make the light a bit brighter if it is nighttime.\n" if ( $tty );
 if ( $is_it_day ) { $brightness = $brightness - $daytime_brightness_mod; }
 
 if ( $is_home == 0 ) {
