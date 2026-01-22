@@ -1,0 +1,45 @@
+# Environment and credentials
+.env
+*.env
+.config/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Perl build artifacts
+*.o
+*.so
+blib/
+inc/
+local/
+cover_db/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Backup files
+*.backup
+*backup/
+
+# Perl-specific
+MANIFEST.bak
+META.json
+META.yml
+Makefile
+pm_to_blib
+
+# Dependencies (if using Carton)
+cpanfile.lock
